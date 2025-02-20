@@ -6,9 +6,8 @@ use Dotenv\Dotenv;
 class MpesaConfig {
     public function __construct()
     {
-        $basePath = dirname(__DIR__, 3);
-        if (file_exists($basePath . '/.env')) {
-            $dotenv = Dotenv::createImmutable($basePath);
+        if (file_exists(getcwd() . '/.env')) {
+            $dotenv = Dotenv::createImmutable(getcwd());
             $dotenv->safeLoad();
         }
     }

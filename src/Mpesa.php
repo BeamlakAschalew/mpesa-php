@@ -1,6 +1,7 @@
 <?php
 
 namespace Beamlak\MpesaPhp;
+
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
@@ -9,7 +10,7 @@ class Mpesa {
     private string $consumerKey;
     private string $consumerSecret;
     private string $baseUrl;
-    private string $accessToken;
+    private ?string $accessToken = null;
     private Client $httpClient;
 
     /**
@@ -23,7 +24,12 @@ class Mpesa {
         $this->consumerSecret = $config->get('MPESA_CONSUMER_SECRET');
         $this->baseUrl = $config->get('MPESA_ENV', 'sandbox') === 'production'
             ? 'https://api.safaricom.et'
-            : 'https://sandbox.safaricom.et';
+            : 'https://apisandbox.safaricom.et';
+
+        $this->httpClient = new Client([
+            'base_uri' => $this->baseUrl,
+            'timeout'  => 10.0,
+        ]);
 
         $this->authenticate();
     }
@@ -33,12 +39,13 @@ class Mpesa {
      */
     private function authenticate(): void
     {
-        $url = $this->baseUrl . '/oauth/v1/generate?grant_type=client_credentials';
+        $url = '/v1/token/generate?grant_type=client_credentials';
 
         $credentials = base64_encode($this->consumerKey . ':' . $this->consumerSecret);
 
+        // Call request with only the URL endpoint
         $response = $this->request('GET', $url, [
-            'Authorization: Basic ' . $credentials
+            'Authorization' => 'Basic ' . $credentials
         ]);
 
         if (isset($response['access_token'])) {
@@ -51,21 +58,22 @@ class Mpesa {
     /**
      * @throws Exception
      */
-    private function request(string $method, string $url, array $data = []): ?array
+    private function request(string $method, string $url, array $headers = [], array $data = []): ?array
     {
         try {
-            $response = $this->httpClient->request($method, $url, [
-                'headers' => [
+            $options = [
+                'headers' => array_merge([
                     'Authorization' => 'Bearer ' . $this->accessToken,
                     'Content-Type'  => 'application/json',
-                ],
+                ], $headers),
                 'json' => $data
-            ]);
+            ];
+
+            $response = $this->httpClient->request($method, $url, $options);
 
             return json_decode($response->getBody(), true);
         } catch (GuzzleException $e) {
             throw new Exception('Mpesa API Request Failed: ' . $e->getMessage());
         }
     }
-
 }
