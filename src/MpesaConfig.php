@@ -4,8 +4,7 @@ namespace Beamlak\MpesaPhp;
 use Dotenv\Dotenv;
 
 class MpesaConfig {
-    public function __construct()
-    {
+    public function __construct() {
         if (file_exists(getcwd() . '/.env')) {
             $dotenv = Dotenv::createImmutable(getcwd());
             $dotenv->safeLoad();

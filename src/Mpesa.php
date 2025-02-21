@@ -2,6 +2,7 @@
 
 namespace Beamlak\MpesaPhp;
 
+use Beamlak\MpesaPhp\MpesaException;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
@@ -11,13 +12,14 @@ class Mpesa {
     private string $consumerSecret;
     private string $baseUrl;
     private ?string $accessToken = null;
+    private ?string $expiresIn = null;
+
     private Client $httpClient;
 
     /**
      * @throws Exception
      */
-    public function __construct()
-    {
+    public function __construct() {
         $config = new MpesaConfig();
 
         $this->consumerKey = $config->get('MPESA_CONSUMER_KEY');
@@ -33,33 +35,67 @@ class Mpesa {
 
         $this->authenticate();
     }
+    public function display() {
+        echo $this->expiresIn;
+    }
 
     /**
-     * @throws Exception
+     * @throws MpesaException
      */
-    private function authenticate(): void
-    {
+    private function authenticate(): void {
         $url = '/v1/token/generate?grant_type=client_credentials';
 
         $credentials = base64_encode($this->consumerKey . ':' . $this->consumerSecret);
 
-        // Call request with only the URL endpoint
         $response = $this->request('GET', $url, [
             'Authorization' => 'Basic ' . $credentials
         ]);
 
         if (isset($response['access_token'])) {
             $this->accessToken = $response['access_token'];
+            $this->expiresIn = $response['expires_in'];
         } else {
-            throw new Exception('Failed to obtain access token from Mpesa API.');
+            $errorCode = $response['resultCode'] ?? 0;
+            throw new MpesaException($errorCode, 'Failed to obtain access token from Mpesa API.');
         }
     }
 
+
+
     /**
-     * @throws Exception
+     * @throws MpesaException
      */
-    private function request(string $method, string $url, array $headers = [], array $data = []): ?array
-    {
+    public function ussdPush(string $phoneNumber, string $amount, string $reference, string $thirdPartyId): ?array {
+        $url = '/mpesa/stkpush/v3/processrequest';
+
+        $data = [
+            "MerchantRequestID" => "Partner name -" . uniqid(),
+            "BusinessShortCode" => "1020",
+            "Password" => "M2VkZGU2YWY1Y2RhMzIyOWRjMmFkMTRiMjdjOWIwOWUxZDFlZDZiNGQ0OGYyMDRiNjg0ZDZhNWM2NTQyNTk2ZA==",
+            "Timestamp" => date('YmdHis'),
+            "TransactionType" => "CustomerPayBillOnline",
+            "Amount" => $amount,
+            "PartyA" => $phoneNumber,
+            "PartyB" => "1020",
+            "PhoneNumber" => $phoneNumber,
+            "CallBackURL" => "https://www.myservice:8080/result",
+            "AccountReference" => $reference,
+            "TransactionDesc" => "Payment Reason",
+            "ReferenceData" => [
+                [
+                    "Key" => "ThirdPartyReference",
+                    "Value" => $thirdPartyId
+                ]
+            ]
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    /**
+     * @throws MpesaException
+     */
+    private function request(string $method, string $url, array $headers = [], array $data = []): ?array {
         try {
             $options = [
                 'headers' => array_merge([
@@ -73,7 +109,7 @@ class Mpesa {
 
             return json_decode($response->getBody(), true);
         } catch (GuzzleException $e) {
-            throw new Exception('Mpesa API Request Failed: ' . $e->getMessage());
+            throw new MpesaException('Mpesa API Request Failed: ' . $e->getMessage());
         }
     }
 }
