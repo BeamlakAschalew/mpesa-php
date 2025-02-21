@@ -65,18 +65,19 @@ class Mpesa {
     /**
      * @throws MpesaException
      */
-    public function ussdPush(string $phoneNumber, string $amount, string $reference, string $thirdPartyId): ?array {
+    public function ussdPush(string $phoneNumber, string $amount, string $reference, string $thirdPartyId, string $businessCode, string $passKey): ?array {
         $url = '/mpesa/stkpush/v3/processrequest';
-
+        $timestamp = date('YmdHis');
+        $password = base64_encode(hash('sha256', $businessCode . $passKey . $timestamp));
         $data = [
             "MerchantRequestID" => "Partner name -" . uniqid(),
-            "BusinessShortCode" => "1020",
-            "Password" => "M2VkZGU2YWY1Y2RhMzIyOWRjMmFkMTRiMjdjOWIwOWUxZDFlZDZiNGQ0OGYyMDRiNjg0ZDZhNWM2NTQyNTk2ZA==",
-            "Timestamp" => date('YmdHis'),
+            "BusinessShortCode" => $businessCode,
+            "Password" => $password,
+            "Timestamp" => $timestamp,
             "TransactionType" => "CustomerPayBillOnline",
             "Amount" => $amount,
             "PartyA" => $phoneNumber,
-            "PartyB" => "1020",
+            "PartyB" => $businessCode,
             "PhoneNumber" => $phoneNumber,
             "CallBackURL" => "https://www.myservice:8080/result",
             "AccountReference" => $reference,
@@ -87,6 +88,103 @@ class Mpesa {
                     "Value" => $thirdPartyId
                 ]
             ]
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    public function registerUrl(string $shortCode, string $confirmationUrl = 'https://www.myservice:8080/confirmation', string $validationUrl = 'https://www.myservice:8080/validation'): ?array {
+        $url = '/v1/c2b-register-url/register';
+        $data = [
+            'ShortCode' => $shortCode,
+            'ResponseType' => 'Completed',
+            'ConfirmationURL' => $confirmationUrl,
+            'ValidationURL' => $validationUrl
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    public function simulateC2B(string $shortCode, string $phoneNumber, string $amount, string $reference): ?array {
+        $url = '/mpesa/b2c/simulatetransaction/v1/request';
+        $data = [
+            'ShortCode' => $shortCode,
+            'CommandID' => 'CustomerPayBillOnline',
+            'Amount' => $amount,
+            'Msisdn' => $phoneNumber,
+            'BillRefNumber' => $reference
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    public function queryTransactionStatus(string $transactionId, string $shortCode, string $passKey): ?array {
+        $url = '/mpesa/transactionstatus/v1/query';
+        $timestamp = date('YmdHis');
+        $password = base64_encode(hash('sha256', $shortCode . $passKey . $timestamp));
+        $data = [
+            'Initiator' => $shortCode,
+            'SecurityCredential' => $password,
+            'CommandID' => 'TransactionStatusQuery',
+            'TransactionID' => $transactionId,
+            'PartyA' => $shortCode,
+            'IdentifierType' => '4',
+            'ResultURL' => 'https://www.myservice:8080/result',
+            'QueueTimeOutURL' => 'https://www.myservice:8080/timeout',
+            'Remarks' => 'Transaction status query',
+            'Occasion' => 'Transaction status query'
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    public function reverseTransaction(
+        string $transactionId,
+        string $shortCode,
+        string $amount,
+        string $receiver,
+        string $receiverType,
+        string $passKey,
+        string $originalConversationID
+    ): ?array {
+        $url = '/mpesa/reversal/v2';
+        $timestamp = date('YmdHis');
+        $password = base64_encode(hash('sha256', $shortCode . $passKey . $timestamp));
+        $data = [
+            'OriginatorConversationID' => 'Partner name -' . uniqid(),
+            'Initiator' => $shortCode,
+            'SecurityCredential' => $password,
+            'CommandID' => 'TransactionReversal',
+            'TransactionID' => $transactionId,
+            'Amount' => $amount,
+            'OriginalConversationID' => $originalConversationID,
+            'PartyA' => $shortCode,
+            'ReceiverIdentifierType' => $receiverType,
+            'ReceiverParty' => $receiver,
+            'ResultURL' => 'https://www.myservice:8080/result',
+            'QueueTimeOutURL' => 'https://www.myservice:8080/timeout',
+            'Remarks' => 'B2C Reversal',
+            'Occasion' => 'Payout'
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    public function accountBalance(string $shortCode, string $passKey): ?array {
+        $url = '/mpesa/accountbalance/v2/query';
+        $timestamp = date('YmdHis');
+        $password = base64_encode(hash('sha256', $shortCode . $passKey . $timestamp));
+        $data = [
+            'OriginatorConversationID' => 'Partner name -' . uniqid(),
+            'Initiator' => $shortCode,
+            'SecurityCredential' => $password,
+            'CommandID' => 'AccountBalance',
+            'PartyA' => $shortCode,
+            'IdentifierType' => '4',
+            'ResultURL' => 'https://www.myservice:8080/result',
+            'QueueTimeOutURL' => 'https://www.myservice:8080/timeout',
+            'Remarks' => 'Account balance query',
+            'Occasion' => 'Account balance query'
         ];
 
         return $this->request('POST', $url, [], $data);
