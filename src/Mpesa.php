@@ -52,6 +52,14 @@ class Mpesa {
     }
 
     /**
+     * Set the HTTP client.
+     * @param Client $httpClient
+     */
+    public function setHttpClient(Client $httpClient): void {
+        $this->httpClient = $httpClient;
+    }
+
+    /**
      * Authenticate with the Mpesa API to obtain an access token.
      * @throws MpesaException
      */
@@ -71,6 +79,13 @@ class Mpesa {
             $errorCode = $response['resultCode'] ?? 0;
             throw new MpesaException($errorCode, 'Failed to obtain access token from Mpesa API.');
         }
+    }
+
+    /**
+     * Public method to call the private authenticate method for testing purposes.
+     */
+    public function authenticatePublic(): void {
+        $this->authenticate();
     }
 
     /**
@@ -375,7 +390,24 @@ class Mpesa {
 
             return json_decode($response->getBody(), true);
         } catch (GuzzleException $e) {
-            throw new MpesaException('Mpesa API Request Failed: ' . $e->getMessage());
+            echo $e;
+            throw new MpesaException(0, 'Mpesa API Request Failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Get the access token.
+     * @return string|null
+     */
+    public function getAccessToken(): ?string {
+        return $this->accessToken;
+    }
+
+    /**
+     * Get the expiration time of the access token.
+     * @return string|null
+     */
+    public function getExpiresIn(): ?string {
+        return $this->expiresIn;
     }
 }
