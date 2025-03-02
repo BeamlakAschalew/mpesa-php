@@ -7,19 +7,26 @@ use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 
+/**
+ * Class Mpesa
+ * @package Beamlak\MpesaPhp
+ */
 class Mpesa {
     private string $consumerKey;
     private string $consumerSecret;
     private string $baseUrl;
     private ?string $accessToken = null;
     private ?string $expiresIn = null;
+    private string $callbackUrl;
 
     private Client $httpClient;
 
     /**
+     * Mpesa constructor.
+     * @param string $callbackUrl
      * @throws Exception
      */
-    public function __construct() {
+    public function __construct(string $callbackUrl = 'https://www.myservice:8080') {
         $config = new MpesaConfig();
 
         $this->consumerKey = $config->get('MPESA_CONSUMER_KEY');
@@ -27,6 +34,7 @@ class Mpesa {
         $this->baseUrl = $config->get('MPESA_ENV', 'sandbox') === 'production'
             ? 'https://api.safaricom.et'
             : 'https://apisandbox.safaricom.et';
+        $this->callbackUrl = $callbackUrl;
 
         $this->httpClient = new Client([
             'base_uri' => $this->baseUrl,
@@ -35,11 +43,16 @@ class Mpesa {
 
         $this->authenticate();
     }
+
+    /**
+     * Display the expiration time of the access token.
+     */
     public function display() {
         echo $this->expiresIn;
     }
 
     /**
+     * Authenticate with the Mpesa API to obtain an access token.
      * @throws MpesaException
      */
     private function authenticate(): void {
@@ -60,9 +73,16 @@ class Mpesa {
         }
     }
 
-
-
     /**
+     * Initiate a USSD push request.
+     * 
+     * @param string $phoneNumber
+     * @param string $amount
+     * @param string $reference
+     * @param string $thirdPartyId
+     * @param string $businessCode
+     * @param string $passKey
+     * @return array|null
      * @throws MpesaException
      */
     public function ussdPush(string $phoneNumber, string $amount, string $reference, string $thirdPartyId, string $businessCode, string $passKey): ?array {
@@ -79,7 +99,7 @@ class Mpesa {
             "PartyA" => $phoneNumber,
             "PartyB" => $businessCode,
             "PhoneNumber" => $phoneNumber,
-            "CallBackURL" => "https://www.myservice:8080/result",
+            "CallBackURL" => $this->callbackUrl . "/result",
             "AccountReference" => $reference,
             "TransactionDesc" => "Payment Reason",
             "ReferenceData" => [
@@ -93,18 +113,93 @@ class Mpesa {
         return $this->request('POST', $url, [], $data);
     }
 
-    public function registerUrl(string $shortCode, string $confirmationUrl = 'https://www.myservice:8080/confirmation', string $validationUrl = 'https://www.myservice:8080/validation'): ?array {
+    /**
+     * Register confirmation and validation URLs.
+     * 
+     * @param string $shortCode
+     * @param string $confirmationUrl
+     * @param string $validationUrl
+     * @return array|null
+     * @throws MpesaException
+     */
+    public function registerUrl(string $shortCode, string $confirmationUrl = '', string $validationUrl = ''): ?array {
         $url = '/v1/c2b-register-url/register';
         $data = [
             'ShortCode' => $shortCode,
             'ResponseType' => 'Completed',
-            'ConfirmationURL' => $confirmationUrl,
-            'ValidationURL' => $validationUrl
+            'ConfirmationURL' => $confirmationUrl ?: $this->callbackUrl . '/confirmation',
+            'ValidationURL' => $validationUrl ?: $this->callbackUrl . '/validation'
         ];
 
         return $this->request('POST', $url, [], $data);
     }
 
+    /**
+     * Validate a C2B transaction.
+     * 
+     * @param string $checkUrl
+     * @param string $transactionType
+     * @param string $transID
+     * @param string $transTime
+     * @param string $transAmount
+     * @param string $businessShortCode
+     * @param string $billRefNumber
+     * @param string $msisdn
+     * @param string $firstName
+     * @param string $middleName
+     * @param string $lastName
+     * @param string $invoiceNumber
+     * @param string $orgAccountBalance
+     * @param string $thirdPartyTransID
+     * @return array|null
+     * @throws MpesaException
+     */
+    public function validateC2B(
+        string $checkUrl,
+        string $transactionType,
+        string $transID,
+        string $transTime,
+        string $transAmount,
+        string $businessShortCode,
+        string $billRefNumber,
+        string $msisdn,
+        string $firstName,
+        string $middleName,
+        string $lastName,
+        string $invoiceNumber = '',
+        string $orgAccountBalance = '',
+        string $thirdPartyTransID = ''
+    ): ?array {
+        $data = [
+            "RequestType" => "Validation",
+            "TransactionType" => $transactionType,
+            "TransID" => $transID,
+            "TransTime" => $transTime,
+            "TransAmount" => $transAmount,
+            "BusinessShortCode" => $businessShortCode,
+            "BillRefNumber" => $billRefNumber,
+            "InvoiceNumber" => $invoiceNumber,
+            "OrgAccountBalance" => $orgAccountBalance,
+            "ThirdPartyTransID" => $thirdPartyTransID,
+            "MSISDN" => $msisdn,
+            "FirstName" => $firstName,
+            "MiddleName" => $middleName,
+            "LastName" => $lastName
+        ];
+
+        return $this->request('POST', $checkUrl, [], $data);
+    }
+
+    /**
+     * Simulate a C2B transaction.
+     * 
+     * @param string $shortCode
+     * @param string $phoneNumber
+     * @param string $amount
+     * @param string $reference
+     * @return array|null
+     * @throws MpesaException
+     */
     public function simulateC2B(string $shortCode, string $phoneNumber, string $amount, string $reference): ?array {
         $url = '/mpesa/b2c/simulatetransaction/v1/request';
         $data = [
@@ -118,6 +213,51 @@ class Mpesa {
         return $this->request('POST', $url, [], $data);
     }
 
+    /**
+     * Initiate a payout request.
+     * 
+     * @param string $shortCode
+     * @param string $phoneNumber
+     * @param string $amount
+     * @param string $passKey
+     * @return array|null
+     * @throws MpesaException
+     */
+    public function payout(
+        string $shortCode,
+        string $phoneNumber,
+        string $amount,
+        string $passKey
+    ): ?array {
+        $url = '/mpesa/b2c/v2/paymentrequest';
+        $timestamp = date('YmdHis');
+        $password = base64_encode(hash('sha256', $shortCode . $passKey . $timestamp));
+        $data = [
+            'OriginatorConversationID' => 'Partner name -' . uniqid(),
+            'InitiatorName' => $shortCode,
+            'SecurityCredential' => $password,
+            'CommandID' => 'BusinessPayment',
+            'Amount' => $amount,
+            'PartyA' => $shortCode,
+            'PartyB' => $phoneNumber,
+            'Remarks' => 'Payment',
+            'QueueTimeOutURL' => $this->callbackUrl . '/timeout',
+            'ResultURL' => $this->callbackUrl . '/result',
+            'Occasion' => 'Payment',
+        ];
+
+        return $this->request('POST', $url, [], $data);
+    }
+
+    /**
+     * Query the status of a transaction.
+     * 
+     * @param string $transactionId
+     * @param string $shortCode
+     * @param string $passKey
+     * @return array|null
+     * @throws MpesaException
+     */
     public function queryTransactionStatus(string $transactionId, string $shortCode, string $passKey): ?array {
         $url = '/mpesa/transactionstatus/v1/query';
         $timestamp = date('YmdHis');
@@ -129,8 +269,8 @@ class Mpesa {
             'TransactionID' => $transactionId,
             'PartyA' => $shortCode,
             'IdentifierType' => '4',
-            'ResultURL' => 'https://www.myservice:8080/result',
-            'QueueTimeOutURL' => 'https://www.myservice:8080/timeout',
+            'ResultURL' => $this->callbackUrl . '/result',
+            'QueueTimeOutURL' => $this->callbackUrl . '/timeout',
             'Remarks' => 'Transaction status query',
             'Occasion' => 'Transaction status query'
         ];
@@ -138,6 +278,19 @@ class Mpesa {
         return $this->request('POST', $url, [], $data);
     }
 
+    /**
+     * Reverse a transaction.
+     * 
+     * @param string $transactionId
+     * @param string $shortCode
+     * @param string $amount
+     * @param string $receiver
+     * @param string $receiverType
+     * @param string $passKey
+     * @param string $originalConversationID
+     * @return array|null
+     * @throws MpesaException
+     */
     public function reverseTransaction(
         string $transactionId,
         string $shortCode,
@@ -161,8 +314,8 @@ class Mpesa {
             'PartyA' => $shortCode,
             'ReceiverIdentifierType' => $receiverType,
             'ReceiverParty' => $receiver,
-            'ResultURL' => 'https://www.myservice:8080/result',
-            'QueueTimeOutURL' => 'https://www.myservice:8080/timeout',
+            'ResultURL' => $this->callbackUrl . '/result',
+            'QueueTimeOutURL' => $this->callbackUrl . '/timeout',
             'Remarks' => 'B2C Reversal',
             'Occasion' => 'Payout'
         ];
@@ -170,6 +323,14 @@ class Mpesa {
         return $this->request('POST', $url, [], $data);
     }
 
+    /**
+     * Query the account balance.
+     * 
+     * @param string $shortCode
+     * @param string $passKey
+     * @return array|null
+     * @throws MpesaException
+     */
     public function accountBalance(string $shortCode, string $passKey): ?array {
         $url = '/mpesa/accountbalance/v2/query';
         $timestamp = date('YmdHis');
@@ -181,8 +342,8 @@ class Mpesa {
             'CommandID' => 'AccountBalance',
             'PartyA' => $shortCode,
             'IdentifierType' => '4',
-            'ResultURL' => 'https://www.myservice:8080/result',
-            'QueueTimeOutURL' => 'https://www.myservice:8080/timeout',
+            'ResultURL' => $this->callbackUrl . '/result',
+            'QueueTimeOutURL' => $this->callbackUrl . '/timeout',
             'Remarks' => 'Account balance query',
             'Occasion' => 'Account balance query'
         ];
@@ -191,6 +352,13 @@ class Mpesa {
     }
 
     /**
+     * Make a request to the Mpesa API.
+     * 
+     * @param string $method
+     * @param string $url
+     * @param array $headers
+     * @param array $data
+     * @return array|null
      * @throws MpesaException
      */
     private function request(string $method, string $url, array $headers = [], array $data = []): ?array {

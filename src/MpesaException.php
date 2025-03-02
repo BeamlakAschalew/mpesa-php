@@ -4,6 +4,10 @@ namespace Beamlak\MpesaPhp;
 
 use Exception;
 
+/**
+ * Class MpesaException
+ * @package Beamlak\MpesaPhp
+ */
 class MpesaException extends Exception {
     private static array $errorMessages = [
         0 => 'Request successful',
@@ -13,8 +17,13 @@ class MpesaException extends Exception {
         999998 => 'Required parameter [grant_type] is invalid or empty: Incorrect grant type. Select grant type as client credentials.',
     ];
 
-    public function __construct(int $code, $message = "", ?Exception $previous = null)
-    {
+    /**
+     * MpesaException constructor.
+     * @param int $code
+     * @param string $message
+     * @param Exception|null $previous
+     */
+    public function __construct(int $code, $message = "", ?Exception $previous = null) {
         $message = self::$errorMessages[$code] ?? $message;
         parent::__construct($message, $code, $previous);
     }
